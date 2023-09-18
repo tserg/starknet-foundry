@@ -107,7 +107,7 @@ pub fn call_contract(
         &mut resources,
         &mut context,
     );
-
+    dbg!(&resources);
     let gas = gas_from_execution_resources(&block_context, &resources);
     let resource_report = ResourceReport::new(gas, &resources);
 

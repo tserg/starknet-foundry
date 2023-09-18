@@ -13,7 +13,7 @@ use cairo_lang_sierra::program::Program;
 use cairo_lang_sierra_to_casm::metadata::MetadataComputationConfig;
 use cairo_lang_utils::ordered_hash_map::OrderedHashMap;
 
-use crate::running::run_from_test_case;
+use crate::running::{run_from_test_case, run_from_test_case2};
 use crate::scarb::{ForgeConfig, StarknetContractArtifacts};
 pub use crate::test_file_summary::TestFileSummary;
 use test_collector::{collect_tests, LinkedLibrary, TestCase};
@@ -269,7 +269,7 @@ fn run_tests_from_file(
 
     let mut results = vec![];
     for (i, case) in tests.test_cases.iter().enumerate() {
-        let result = run_from_test_case(&runner, case, contracts, predeployed_contracts)?;
+        let result = run_from_test_case2(&runner, case, contracts, predeployed_contracts)?;
         results.push(result.clone());
 
         pretty_printing::print_test_result(&result);

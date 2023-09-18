@@ -568,6 +568,21 @@ fn execute_call_contract(
     )
     .unwrap_or_else(|err| panic!("Transaction execution error: {err}"));
 
+    match &call_result {
+        CallContractOutput::Success {
+            ret_data,
+            resource_report,
+        } => {
+            dbg!(resource_report);
+        }
+        CallContractOutput::Panic { panic_data, resource_report } => {
+            dbg!(resource_report);
+        }
+        CallContractOutput::Error {  msg,resource_report } => {
+            dbg!(resource_report);
+        }
+    }
+
     let (result, exit_code) = match call_result {
         CallContractOutput::Success { ret_data, .. } => (ret_data, 0),
         CallContractOutput::Panic { panic_data, .. } => (panic_data, 1),
