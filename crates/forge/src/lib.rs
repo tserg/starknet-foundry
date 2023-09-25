@@ -5,7 +5,9 @@ use anyhow::{bail, Context, Result};
 use ark_std::iterable::Iterable;
 use cairo_felt::Felt252;
 use camino::{Utf8Path, Utf8PathBuf};
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use serde::Deserialize;
 use test_case_summary::TestCaseSummary;
 use walkdir::WalkDir;
@@ -372,20 +374,22 @@ fn run_with_fuzzing(
         &Felt252::prime(),
     );
 
-    let mut results = vec![];
+    let all_args: Vec<Vec<Felt252>> = (1..runner_config.fuzzer_runs)
+        .collect::<Vec<u32>>()
+        .iter()
+        .map(|_| fuzzer.next_felt252_args())
+        .collect();
 
-    for _ in 1..=runner_config.fuzzer_runs {
-        let args = fuzzer.next_felt252_args();
-
-        let result =
-            run_from_test_case(runner, case, contracts, predeployed_contracts, args.clone())?;
-        results.push(result.clone());
-
-        if let TestCaseSummary::Failed { .. } = result {
-            // Fuzz failed
-            break;
-        }
-    }
+    let results: Vec<TestCaseSummary> = all_args
+        .par_iter()
+        .map(|args| {
+            match run_from_test_case(runner, case, contracts, predeployed_contracts, args.clone()) {
+                Ok(result) => Some(result),
+                Err(_) => None,
+            }
+        })
+        .while_some()
+        .collect();
 
     let result = results
         .last()
