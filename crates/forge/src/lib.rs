@@ -1,3 +1,4 @@
+use std::clone;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -6,9 +7,11 @@ use ark_std::iterable::Iterable;
 use cairo_felt::Felt252;
 use camino::{Utf8Path, Utf8PathBuf};
 use rayon::prelude::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator,
+    IntoParallelRefMutIterator, ParallelIterator,
 };
 use serde::Deserialize;
+use std::sync::mpsc::channel;
 use test_case_summary::TestCaseSummary;
 use walkdir::WalkDir;
 
@@ -225,46 +228,44 @@ pub fn run(
         package_name,
     );
 
-    let mut tests_iterator = tests.into_iter();
+    // let mut tests_iterator = tests.clone().into_iter();
 
     let mut fuzzing_happened = false;
-    let mut summaries = vec![];
 
-    for tests_from_file in tests_iterator.by_ref() {
-        let (summary, was_fuzzed) = run_tests_from_file(
-            tests_from_file,
-            runner_config,
-            contracts,
-            predeployed_contracts,
-            fuzzer_seed,
-        )?;
+    let summaries: Vec<TestFileSummary> = tests
+        .par_iter()
+        .map(|tests_from_file| {
+            let (summary, was_fuzzed) = run_tests_from_file(
+                tests_from_file,
+                runner_config,
+                contracts,
+                predeployed_contracts,
+                fuzzer_seed,
+            )
+            .unwrap();
 
-        fuzzing_happened |= was_fuzzed;
+            summary
+        })
+        .collect();
 
-        summaries.push(summary.clone());
-        if summary.runner_exit_status == RunnerStatus::TestFailed {
-            break;
-        }
-    }
+    // for tests_from_file in tests_iterator {
+    //     let skipped: Vec<TestCaseSummary> = tests_from_file
+    //         .test_cases
+    //         .iter()
+    //         .map(TestCaseSummary::skipped)
+    //         .collect();
 
-    for tests_from_file in tests_iterator {
-        let skipped: Vec<TestCaseSummary> = tests_from_file
-            .test_cases
-            .iter()
-            .map(TestCaseSummary::skipped)
-            .collect();
+    //     for test_case_summary in &skipped {
+    //         pretty_printing::print_test_result(test_case_summary, None);
+    //     }
 
-        for test_case_summary in &skipped {
-            pretty_printing::print_test_result(test_case_summary, None);
-        }
-
-        let file_summary = TestFileSummary {
-            test_case_summaries: skipped,
-            runner_exit_status: RunnerStatus::DidNotRun,
-            relative_path: tests_from_file.relative_path,
-        };
-        summaries.push(file_summary);
-    }
+    //     let file_summary = TestFileSummary {
+    //         test_case_summaries: skipped,
+    //         runner_exit_status: RunnerStatus::DidNotRun,
+    //         relative_path: tests_from_file.relative_path,
+    //     };
+    //     summaries.push(file_summary);
+    // }
 
     pretty_printing::print_test_summary(&summaries);
     if fuzzing_happened {
@@ -275,76 +276,93 @@ pub fn run(
 }
 
 fn run_tests_from_file(
-    tests: TestsFromFile,
+    tests: &TestsFromFile,
     runner_config: &RunnerConfig,
     contracts: &HashMap<String, StarknetContractArtifacts>,
     predeployed_contracts: &Utf8PathBuf,
     fuzzer_seed: u64,
 ) -> Result<(TestFileSummary, bool)> {
     let runner = SierraCasmRunner::new(
-        tests.sierra_program,
+        tests.sierra_program.clone(),
         Some(MetadataComputationConfig::default()),
         OrderedHashMap::default(),
     )
     .context("Failed setting up runner.")?;
-
+    dbg!(runner_config);
     pretty_printing::print_running_tests(&tests.relative_path, tests.test_cases.len());
 
     let mut was_fuzzed = false;
-    let mut results = vec![];
+    let (sender, receiver) = channel();
 
-    for (i, case) in tests.test_cases.iter().enumerate() {
-        let case_name = case.name.as_str();
-        let function = runner.find_function(case_name)?;
-        let args = function_args(function, &BUILTINS);
+    let results: Vec<(TestCaseSummary, Option<u32>)> = tests
+        .test_cases
+        .par_iter()
+        .map_with(sender, |s, case| {
+            let case_name = case.name.as_str();
+            //TODO
+            let function = runner.find_function(case_name).unwrap();
+            let args = function_args(function, &BUILTINS);
 
-        let result = if args.is_empty() {
-            let result =
-                run_from_test_case(&runner, case, contracts, predeployed_contracts, vec![])?;
-            pretty_printing::print_test_result(&result, None);
+            if args.is_empty() {
+                let result =
+                    run_from_test_case(&runner, case, contracts, predeployed_contracts, vec![]);
 
-            result
-        } else {
-            was_fuzzed = true;
-            let (result, runs) = run_with_fuzzing(
-                runner_config,
-                contracts,
-                predeployed_contracts,
-                &runner,
-                case,
-                &args,
-                fuzzer_seed,
-            )?;
-            pretty_printing::print_test_result(&result, Some(runs));
-
-            result
-        };
-
-        results.push(result.clone());
-
-        if runner_config.exit_first {
-            if let TestCaseSummary::Failed { .. } = result {
-                for case in &tests.test_cases[i + 1..] {
-                    let skipped_result = TestCaseSummary::skipped(case);
-                    pretty_printing::print_test_result(&skipped_result, None);
-                    results.push(skipped_result);
+                match result {
+                    Ok(result) => {
+                        if runner_config.exit_first {
+                            if let TestCaseSummary::Failed { .. } = result {
+                                s.send(result).unwrap();
+                                return None;
+                            }
+                        }
+                        pretty_printing::print_test_result(&result, None);
+                        return Some((result, None));
+                    }
+                    Err(e) => {
+                        // return Some(TestCaseSummary::skipped(case));
+                        // s.send(result).unwrap();
+                    }
                 }
-                return Ok((
-                    TestFileSummary {
-                        test_case_summaries: results,
-                        runner_exit_status: RunnerStatus::TestFailed,
-                        relative_path: tests.relative_path,
-                    },
-                    was_fuzzed,
-                ));
+            } else {
+                let result = run_with_fuzzing(
+                    runner_config,
+                    contracts,
+                    predeployed_contracts,
+                    &runner,
+                    case,
+                    &args,
+                    fuzzer_seed,
+                );
+                match result {
+                    Ok((res, runs)) => {
+                        //
+                        return Some((res, Some(runs)));
+                    }
+                    Err(e) => {
+                        if runner_config.exit_first {}
+                        return None;
+                    }
+                }
             }
-        }
-    }
+            return None;
+            //TODO
+        })
+        .while_some()
+        .collect();
+
+    results
+        .iter()
+        .for_each(|(res, runs)| pretty_printing::print_test_result(&res, *runs));
+
+    let b: Vec<_> = receiver
+        .iter() // iterating over the values in the channel
+        .collect();
+
     Ok((
         TestFileSummary {
-            test_case_summaries: results,
+            test_case_summaries: results.iter().map(|(res, _runs)| res.clone()).collect(),
             runner_exit_status: RunnerStatus::Default,
-            relative_path: tests.relative_path,
+            relative_path: tests.relative_path.clone(),
         },
         was_fuzzed,
     ))
@@ -379,17 +397,37 @@ fn run_with_fuzzing(
         .iter()
         .map(|_| fuzzer.next_felt252_args())
         .collect();
+    let (sender, receiver) = channel();
 
     let results: Vec<TestCaseSummary> = all_args
         .par_iter()
-        .map(|args| {
+        .map_with(sender, |s, args| {
             match run_from_test_case(runner, case, contracts, predeployed_contracts, args.clone()) {
-                Ok(result) => Some(result),
+                Ok(result) => {
+                    if let TestCaseSummary::Failed { .. } = result {
+                        s.send(result).unwrap();
+                        return None;
+                    }
+                    Some(result)
+                }
                 Err(_) => None,
             }
         })
         .while_some()
         .collect();
+
+    let b: Vec<_> = receiver
+        .iter() // iterating over the values in the channel
+        .collect();
+    if !b.is_empty() {
+        let runs = u32::try_from(results.len())?;
+        return Ok((
+            b.last()
+                .expect("Test should always run at least once")
+                .clone(),
+            runs + 1,
+        ));
+    };
 
     let result = results
         .last()
