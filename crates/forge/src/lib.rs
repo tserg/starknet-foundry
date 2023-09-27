@@ -315,7 +315,7 @@ fn run_tests_from_file(
                                 return None;
                             }
                         }
-                        pretty_printing::print_test_result(&result, None);
+                        // pretty_printing::print_test_result(&result, None);
                         return Some((result, None));
                     }
                     Err(e) => {
@@ -335,13 +335,15 @@ fn run_tests_from_file(
                 );
                 match result {
                     Ok((res, runs)) => {
-                        //
+                        if runner_config.exit_first {
+                            if let TestCaseSummary::Failed { .. } = res {
+                                s.send(res).unwrap();
+                                return None;
+                            }
+                        }
                         return Some((res, Some(runs)));
                     }
-                    Err(e) => {
-                        if runner_config.exit_first {}
-                        return None;
-                    }
+                    Err(e) => return None,
                 }
             }
             return None;
@@ -353,10 +355,11 @@ fn run_tests_from_file(
     results
         .iter()
         .for_each(|(res, runs)| pretty_printing::print_test_result(&res, *runs));
-
-    let b: Vec<_> = receiver
-        .iter() // iterating over the values in the channel
-        .collect();
+    if runner_config.exit_first {
+        let failResult: Vec<TestCaseSummary> = receiver
+            .iter() // iterating over the values in the channel
+            .collect();
+    }
 
     Ok((
         TestFileSummary {
