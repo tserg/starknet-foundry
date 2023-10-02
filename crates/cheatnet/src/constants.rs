@@ -98,8 +98,8 @@ pub fn build_block_context() -> BlockContext {
         deprecated_fee_token_address: ContractAddress(patricia_key!(TEST_ERC20_CONTRACT_ADDRESS)),
         vm_resource_fee_cost,
         gas_price: 100 * u128::pow(10, 9),
-        invoke_tx_max_n_steps: 1_000_000,
-        validate_max_n_steps: 1_000_000,
+        invoke_tx_max_n_steps: 3_000_000,
+        validate_max_n_steps: 3_000_000,
         max_recursion_depth: 50,
     }
 }
