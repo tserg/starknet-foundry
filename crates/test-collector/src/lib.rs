@@ -71,6 +71,8 @@ pub enum ForkConfig {
 pub struct SingleTestConfig {
     /// The amount of gas the test requested.
     pub available_gas: Option<usize>,
+    /// The maximum cairo steps for a single transaction.
+    pub max_steps: Option<u32>,
     /// The expected result of the run.
     pub expected_result: ExpectedTestResult,
     /// Should the test be ignored.
@@ -121,6 +123,8 @@ pub fn try_extract_test_config(
         .find(|attr| attr.id.as_str() == "available_gas");
     let should_panic_attr = attrs.iter().find(|attr| attr.id.as_str() == "should_panic");
     let fork_attr = attrs.iter().find(|attr| attr.id.as_str() == "fork");
+    let max_steps_attr = attrs.iter().find(|attr| attr.id.as_str() == "max_steps");
+
     let mut diagnostics = vec![];
     if let Some(attr) = test_attr {
         if !attr.args.is_empty() {
@@ -135,6 +139,7 @@ pub fn try_extract_test_config(
             available_gas_attr,
             should_panic_attr,
             fork_attr,
+            max_steps_attr,
         ]
         .into_iter()
         .flatten()
@@ -212,6 +217,16 @@ pub fn try_extract_test_config(
     } else {
         None
     };
+    let max_steps = if let Some(attr) = max_steps_attr {
+        extract_max_steps(db, attr).on_none(|| {
+            diagnostics.push(PluginDiagnostic {
+                stable_ptr: attr.args_stable_ptr.untyped(),
+                message: "Expected max_steps config must be of the form `<u64>.".into(),
+            });
+        })
+    } else {
+        None
+    };
 
     if !diagnostics.is_empty() {
         return Err(diagnostics);
@@ -221,6 +236,7 @@ pub fn try_extract_test_config(
     } else {
         Some(SingleTestConfig {
             available_gas,
+            max_steps,
             expected_result: if should_panic {
                 ExpectedTestResult::Panics(if let Some(values) = expected_panic_value {
                     ExpectedPanicValue::Exact(values)
@@ -381,6 +397,24 @@ fn extract_fork_config_from_args(db: &dyn SyntaxGroup, attr: &Attribute) -> Opti
     }
 
     Some(ForkConfig::Params(url, block_id[0].unwrap()))
+}
+
+fn extract_max_steps(db: &dyn SyntaxGroup, attr: &Attribute) -> Option<u32> {
+    let [AttributeArg {
+        variant: AttributeArgVariant::Unnamed {
+            value: max_steps, ..
+        },
+        ..
+    }] = &attr.args[..]
+    else {
+        return None;
+    };
+
+    let ast::Expr::Literal(literal) = max_steps else {
+        return None;
+    };
+
+    literal.numeric_value(db)?.to_u32()
 }
 
 /// Represents a dependency of a Cairo project
