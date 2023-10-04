@@ -26,7 +26,7 @@ impl CheatnetState {
             cheatcode_state: CheatcodeState::new(),
             blockifier_state: CachedState::new(state, GlobalContractCache::default()),
             deploy_salt_base: 0,
-            available_steps: max_steps
+            available_steps: max_steps,
         }
     }
 

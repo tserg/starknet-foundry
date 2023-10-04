@@ -372,8 +372,6 @@ impl CheatcodesSyscallHandler<'_> {
                 let calldata = Vec::from(&inputs[2..(2 + calldata_length)]);
                 let contract_address = inputs[2 + calldata_length].to_contract_address();
 
-                self.run_resources
-
                 handle_deploy_result(
                     self.cheatnet_state
                         .deploy_at(&class_hash, &calldata, contract_address),
