@@ -9,12 +9,25 @@ use std::fs;
 use std::path::Path;
 use test_case::test_case;
 
+#[test_case(CONTRACTS_DIR.to_string() + "/map", false ; "Scarb.toml in current_dir")]
+#[test_case(CONTRACTS_DIR.to_string() + "/map", true ; "Scarb.toml passed as argument")]
 #[tokio::test]
-async fn test_happy_case() {
-    let contract_path =
-        duplicate_directory_with_salt(CONTRACTS_DIR.to_string() + "/map", "put", "1");
+async fn test_happy_case(contract_path: String, pass_path_to_scarb_toml: bool) {
+    let salt = if pass_path_to_scarb_toml { "1" } else { "2" };
+    let temp_contract_path = duplicate_directory_with_salt(contract_path, "put", salt);
+
     let accounts_json_path = get_accounts_path("tests/data/accounts/accounts.json");
-    let args = vec![
+
+    let mut args = vec![];
+    let scarb_path;
+    if pass_path_to_scarb_toml {
+        scarb_path = temp_contract_path.path().join("Scarb.toml");
+        args.append(&mut vec![
+            "--path-to-scarb-toml",
+            scarb_path.to_str().unwrap(),
+        ]);
+    }
+    args.append(&mut vec![
         "--url",
         URL,
         "--accounts-file",
@@ -28,17 +41,25 @@ async fn test_happy_case() {
         "Map",
         "--max-fee",
         "99999999999999999",
-    ];
+    ]);
+    dbg!(&args);
+    
+    let current_dir = if pass_path_to_scarb_toml { None } else { Some(temp_contract_path.path()) };
+    let snapbox = runner(&args, current_dir);
+    let bdg = snapbox.assert();
+    let output = bdg.get_output().stdout.clone();
+    let error_output: String = String::from_utf8(bdg.get_output().stderr.clone()).unwrap();
 
-    let snapbox = runner(&args, Some(contract_path.path()));
-    let output = snapbox.assert().success().get_output().stdout.clone();
+    if error_output.is_empty() {
+        let hash = get_transaction_hash(&output);
+        let receipt = get_transaction_receipt(hash).await;
+        assert!(matches!(receipt, Declare(_)));
+    } else {
+        dbg!(error_output);
+        assert!(false);
+    }
 
-    let hash = get_transaction_hash(&output);
-    let receipt = get_transaction_receipt(hash).await;
-
-    assert!(matches!(receipt, Declare(_)));
-
-    fs::remove_dir_all(contract_path).unwrap();
+    fs::remove_dir_all(temp_contract_path).unwrap();
 }
 
 #[tokio::test]
