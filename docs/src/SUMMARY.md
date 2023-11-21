@@ -30,6 +30,7 @@
 * [Invoking Contracts](starknet/invoke.md)
 * [Calling Contracts](starknet/call.md)
 * [Performing Multicall](starknet/multicall.md)
+* [Deployment Scripts](starknet/deployment_scripts.md)
 
 # Foundry Development
 
