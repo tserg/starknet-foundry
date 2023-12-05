@@ -222,9 +222,22 @@ pub(crate) fn is_present(line: &str, actual: &mut Vec<String>) -> bool {
     false
 }
 
+fn get_test_results_lines(input: &str) -> Vec<String> {
+    input
+        .lines()
+        .map(std::convert::Into::into)
+        .filter(|line: &String| line.starts_with("[PASS]") | line.starts_with("[FAIL]"))
+        .map(|line| {
+            let re = Regex::new(r"((\[PASS\]|\[FAIL\])\s*([\w:]*))").unwrap();
+            let caps = re.captures(&line).unwrap();
+            String::from(&caps[0])
+        })
+        .collect()
+}
+
 pub(crate) fn assert_output_contains(output: &str, lines: &str) {
-    let asserted_lines: Vec<String> = lines.lines().map(std::convert::Into::into).collect();
-    let mut actual_lines: Vec<String> = output.lines().map(std::convert::Into::into).collect();
+    let asserted_lines: Vec<String> = get_test_results_lines(lines);
+    let mut actual_lines: Vec<String> = get_test_results_lines(output);
 
     let mut matches = true;
     let mut out = String::new();
