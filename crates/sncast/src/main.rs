@@ -35,8 +35,8 @@ struct Cli {
     profile: Option<String>,
 
     /// Path to Scarb.toml that is to be used; overrides default behaviour of searching for scarb.toml in current or parent directories
-    #[clap(short = 's', long)]
-    path_to_scarb_toml: Option<Utf8PathBuf>,
+    #[clap(short = 'm', long)]
+    manifest_path: Option<Utf8PathBuf>,
 
     /// RPC provider url address; overrides url from Scarb.toml
     #[clap(short = 'u', long = "url")]
@@ -121,14 +121,14 @@ fn main() -> Result<()> {
     let numbers_format = NumbersFormat::from_flags(cli.hex_format, cli.int_format);
     let output_format = OutputFormat::from_flag(cli.json);
 
-    let mut config = parse_scarb_config(&cli.profile, &cli.path_to_scarb_toml, &cli.package)?;
+    let mut config = parse_scarb_config(&cli.profile, &cli.manifest_path, &cli.package)?;
     update_cast_config(&mut config, &cli);
 
     let provider = get_provider(&config.rpc_url)?;
     let runtime = Runtime::new().expect("Failed to instantiate Runtime");
 
     if let Commands::Script(script) = cli.command {
-        let manifest_path = ensure_scarb_manifest_path(&cli.path_to_scarb_toml)?;
+        let manifest_path = ensure_scarb_manifest_path(&cli.manifest_path)?;
         let package_metadata = get_package_metadata(&manifest_path, &cli.package)?;
         let mut artifacts = build(
             &package_metadata,
@@ -184,7 +184,7 @@ async fn run_async_command(
                 config.keystore,
             )
             .await?;
-            let manifest_path = ensure_scarb_manifest_path(&cli.path_to_scarb_toml)?;
+            let manifest_path = ensure_scarb_manifest_path(&cli.manifest_path)?;
             let package_metadata = get_package_metadata(&manifest_path, &cli.package)?;
             let artifacts = build(
                 &package_metadata,
@@ -314,7 +314,7 @@ async fn run_async_command(
                     &config.rpc_url,
                     &add.name.clone(),
                     &config.accounts_file,
-                    &cli.path_to_scarb_toml,
+                    &cli.manifest_path,
                     &cli.package,
                     &provider,
                     &add,
@@ -339,7 +339,7 @@ async fn run_async_command(
                     &config.accounts_file,
                     config.keystore,
                     &provider,
-                    &cli.path_to_scarb_toml,
+                    &cli.manifest_path,
                     &cli.package,
                     chain_id,
                     create.salt,
@@ -398,7 +398,7 @@ async fn run_async_command(
                 let mut result = starknet_commands::account::delete::delete(
                     &delete.name,
                     &config.accounts_file,
-                    &cli.path_to_scarb_toml,
+                    &cli.manifest_path,
                     delete.delete_profile,
                     &network_name,
                     delete.yes,
@@ -418,7 +418,7 @@ async fn run_async_command(
                 &provider,
                 config,
                 cli.profile,
-                cli.path_to_scarb_toml,
+                cli.manifest_path,
             )
             .await;
             print_command_result("show-config", &mut result, numbers_format, &output_format)?;

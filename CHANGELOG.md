@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `--package` flag to specify scarb package to work with
 
+#### Changed
+
+- Renamed `--path-to-scarb-toml, -s` parameter to `--manifest-path, -m` 
+
 ## [0.14.0] - 2024-01-11
 
 ### Forge

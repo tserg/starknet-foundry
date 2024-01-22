@@ -34,7 +34,7 @@ pub struct Delete {
 pub fn delete(
     name: &str,
     path: &Utf8PathBuf,
-    path_to_scarb_toml: &Option<Utf8PathBuf>,
+    manifest_path: &Option<Utf8PathBuf>,
     delete_profile: Option<bool>,
     network_name: &str,
     yes: bool,
@@ -79,7 +79,7 @@ pub fn delete(
     let mut scarb_result = "Account not removed from Scarb.toml".to_string();
     // delete profile if delete_profile is true or not passed
     if delete_profile == Some(true) {
-        let manifest_path = ensure_scarb_manifest_path(path_to_scarb_toml)?;
+        let manifest_path = ensure_scarb_manifest_path(manifest_path)?;
         let mut toml_content = String::new();
         let mut file = File::open(manifest_path.clone()).expect("Failed to open file");
         file.read_to_string(&mut toml_content)

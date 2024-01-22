@@ -30,7 +30,7 @@ async fn test_happy_case() {
 #[tokio::test]
 async fn test_run_script_from_different_directory() {
     let script_name = "call_happy";
-    let path_to_scarb_toml = "misc/Scarb.toml";
+    let manifest_path = "misc/Scarb.toml";
     let args = vec![
         "--accounts-file",
         "../accounts/accounts.json",
@@ -38,8 +38,8 @@ async fn test_run_script_from_different_directory() {
         "user1",
         "--url",
         URL,
-        "--path-to-scarb-toml",
-        path_to_scarb_toml,
+        "--manifest-path",
+        manifest_path,
         "script",
         &script_name,
     ];
@@ -55,7 +55,7 @@ async fn test_run_script_from_different_directory() {
 }
 
 #[tokio::test]
-async fn test_run_script_from_different_directory_no_path_to_scarb_toml() {
+async fn test_run_script_from_different_directory_no_path_to_manifest() {
     let script_name = "call_happy";
     let args = vec![
         "--accounts-file",

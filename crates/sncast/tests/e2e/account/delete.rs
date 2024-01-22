@@ -47,7 +47,7 @@ pub async fn test_delete_abort() {
 
     // Now delete dummy account
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb1.toml",
         "--url",
         URL,
@@ -81,7 +81,7 @@ pub async fn test_happy_case() {
 
     // Now delete dummy account
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb2.toml",
         "--url",
         URL,
@@ -116,7 +116,7 @@ pub async fn test_happy_case_with_explicit_remove_profile() {
 
     // Now delete dummy account from accountd file and his profile from scarb
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb3.toml",
         "--url",
         URL,
@@ -153,7 +153,7 @@ pub async fn invalid_remove_profile_flag() {
 
     // Now delete dummy account from accountd file and his profile from scarb
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb4.toml",
         "--url",
         URL,
@@ -191,7 +191,7 @@ pub async fn test_happy_case_with_remove_profile_false() {
 
     // Now delete dummy account from accountd file and his profile from scarb
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb5.toml",
         "--url",
         URL,
@@ -228,7 +228,7 @@ pub async fn test_happy_case_without_network_args() {
 
     // Now delete dummy account
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb6.toml",
         "--url",
         URL,
@@ -261,7 +261,7 @@ pub async fn test_happy_case_with_yes_flag() {
 
     // Now delete dummy account
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "temp_scarb7.toml",
         "--url",
         URL,

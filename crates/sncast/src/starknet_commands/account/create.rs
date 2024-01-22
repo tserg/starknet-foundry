@@ -43,7 +43,7 @@ pub async fn create(
     accounts_file: &Utf8PathBuf,
     keystore: Option<Utf8PathBuf>,
     provider: &JsonRpcClient<HttpTransport>,
-    path_to_scarb_toml: &Option<Utf8PathBuf>,
+    manifest_path: &Option<Utf8PathBuf>,
     package_name: &Option<String>,
     chain_id: FieldElement,
     salt: Option<FieldElement>,
@@ -83,7 +83,7 @@ pub async fn create(
     }
 
     if add_profile {
-        let manifest_path = ensure_scarb_manifest_path(path_to_scarb_toml)?;
+        let manifest_path = ensure_scarb_manifest_path(manifest_path)?;
         let config = CastConfig {
             rpc_url: rpc_url.into(),
             account: account.into(),

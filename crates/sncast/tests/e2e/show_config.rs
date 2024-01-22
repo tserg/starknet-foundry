@@ -4,7 +4,7 @@ use indoc::indoc;
 #[tokio::test]
 async fn test_show_config_from_scarb_toml() {
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/show_config/wait_Scarb.toml",
         "--profile",
         "profile1",
@@ -60,7 +60,7 @@ async fn test_show_config_from_cli_and_scarb() {
     let args = vec![
         "--account",
         "user2",
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/show_config/all_Scarb.toml",
         "--profile",
         "profile1",
@@ -85,7 +85,7 @@ async fn test_show_config_from_cli_and_scarb() {
 #[tokio::test]
 async fn test_show_config_when_no_keystore() {
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/show_config/all_Scarb.toml",
         "--profile",
         "profile1",
@@ -110,7 +110,7 @@ async fn test_show_config_when_no_keystore() {
 #[tokio::test]
 async fn test_show_config_when_keystore() {
     let args = vec![
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/show_config/all_Scarb.toml",
         "show-config",
     ];

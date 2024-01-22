@@ -5,7 +5,7 @@ Optional.
 
 Profile name in `Scarb.toml` config file.
 
-## `--path-to-scarb-toml, -s <PATH>`
+## `--manifest-path, -m <PATH>`
 Optional.
 
 Path to `Scarb.toml` file.

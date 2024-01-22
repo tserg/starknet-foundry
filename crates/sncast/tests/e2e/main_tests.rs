@@ -12,7 +12,7 @@ async fn test_happy_case_from_scarb() {
     let args = vec![
         "--accounts-file",
         ACCOUNT_FILE_PATH,
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/files/correct_Scarb.toml",
         "call",
         "--contract-address",
@@ -59,7 +59,7 @@ async fn test_happy_case_from_cli_with_scarb() {
     let args = vec![
         "--accounts-file",
         ACCOUNT_FILE_PATH,
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/files/correct_Scarb.toml",
         "--profile",
         "profile1",
@@ -92,7 +92,7 @@ async fn test_happy_case_mixed() {
     let args = vec![
         "--accounts-file",
         ACCOUNT_FILE_PATH,
-        "--path-to-scarb-toml",
+        "--manifest-path",
         "tests/data/files/correct_Scarb.toml",
         "--profile",
         "profile2",
