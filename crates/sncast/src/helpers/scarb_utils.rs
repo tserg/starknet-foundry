@@ -269,7 +269,8 @@ pub fn parse_scarb_config(
         return Ok(CastConfig::default());
     }
 
-    let metadata = get_package_metadata(&manifest_path, package_name)?;
+    let metadata = get_package_metadata(&manifest_path, package_name)
+        .expect("Failed to fetch package metadata");
 
     match get_package_tool_sncast(&metadata) {
         Ok(package_tool_sncast) => {
