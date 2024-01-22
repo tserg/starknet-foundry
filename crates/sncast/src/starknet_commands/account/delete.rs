@@ -3,7 +3,7 @@ use camino::Utf8PathBuf;
 use clap::Args;
 use promptly::prompt;
 use serde_json::Map;
-use sncast::helpers::scarb_utils::get_scarb_manifest;
+use sncast::helpers::scarb_utils::ensure_scarb_manifest_path;
 use sncast::response::structs::AccountDeleteResponse;
 use std::fs::File;
 use std::io::Read;
@@ -79,10 +79,7 @@ pub fn delete(
     let mut scarb_result = "Account not removed from Scarb.toml".to_string();
     // delete profile if delete_profile is true or not passed
     if delete_profile == Some(true) {
-        let manifest_path = match path_to_scarb_toml.clone() {
-            Some(path) => path,
-            None => get_scarb_manifest().context("Failed to obtain manifest path from scarb")?,
-        };
+        let manifest_path = ensure_scarb_manifest_path(path_to_scarb_toml)?;
         let mut toml_content = String::new();
         let mut file = File::open(manifest_path.clone()).expect("Failed to open file");
         file.read_to_string(&mut toml_content)

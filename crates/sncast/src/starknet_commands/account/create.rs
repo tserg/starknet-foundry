@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use clap::Args;
 use serde_json::json;
 use sncast::helpers::constants::{CREATE_KEYSTORE_PASSWORD_ENV_VAR, OZ_CLASS_HASH};
-use sncast::helpers::scarb_utils::CastConfig;
+use sncast::helpers::scarb_utils::{ensure_scarb_manifest_path, get_package_metadata, CastConfig};
 use sncast::response::structs::{AccountCreateResponse, Decimal, Hex};
 use sncast::{extract_or_generate_salt, get_chain_id, get_keystore_password, parse_number};
 use starknet::accounts::{AccountFactory, OpenZeppelinAccountFactory};
@@ -43,7 +43,8 @@ pub async fn create(
     accounts_file: &Utf8PathBuf,
     keystore: Option<Utf8PathBuf>,
     provider: &JsonRpcClient<HttpTransport>,
-    path_to_scarb_toml: Option<Utf8PathBuf>,
+    path_to_scarb_toml: &Option<Utf8PathBuf>,
+    package_name: &Option<String>,
     chain_id: FieldElement,
     salt: Option<FieldElement>,
     add_profile: bool,
@@ -82,6 +83,7 @@ pub async fn create(
     }
 
     if add_profile {
+        let manifest_path = ensure_scarb_manifest_path(path_to_scarb_toml)?;
         let config = CastConfig {
             rpc_url: rpc_url.into(),
             account: account.into(),
@@ -89,7 +91,8 @@ pub async fn create(
             keystore,
             ..Default::default()
         };
-        add_created_profile_to_configuration(&path_to_scarb_toml, &config)?;
+        let package = get_package_metadata(&manifest_path, package_name)?;
+        add_created_profile_to_configuration(&package, &config)?;
     }
 
     Ok(AccountCreateResponse {

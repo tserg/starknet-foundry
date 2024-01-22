@@ -5,7 +5,6 @@ use crate::helpers::fixtures::{
 use indoc::indoc;
 use snapbox::cmd::{cargo_bin, Command};
 use starknet::core::types::TransactionReceipt::Declare;
-use test_case::test_case;
 
 #[tokio::test]
 async fn test_happy_case() {
@@ -86,15 +85,13 @@ async fn wrong_contract_name_passed() {
         error: Failed to find artifacts in starknet_artifacts.json file[..]
     "});
 }
-
-#[test_case("/build_fails", "../../accounts/accounts.json" ; "when wrong cairo contract")]
-#[test_case("/", "../accounts/accounts.json" ; "when Scarb.toml does not exist")]
-fn scarb_build_fails(contract_path: &str, accounts_file_path: &str) {
+#[test]
+fn scarb_build_fails_wrong_cairo_contract() {
     let args = vec![
         "--url",
         URL,
         "--accounts-file",
-        accounts_file_path,
+        "../../accounts/accounts.json",
         "--account",
         "user1",
         "declare",
@@ -103,12 +100,35 @@ fn scarb_build_fails(contract_path: &str, accounts_file_path: &str) {
     ];
 
     let snapbox = Command::new(cargo_bin!("sncast"))
-        .current_dir(CONTRACTS_DIR.to_string() + contract_path)
+        .current_dir(CONTRACTS_DIR.to_string() + "/build_fails")
         .args(args);
 
     snapbox.assert().stderr_matches(indoc! {r"
         ...
         Error: Failed to build using scarb; `scarb` exited with error
+    "});
+}
+
+#[test]
+fn scarb_build_fails_manifest_does_not_exist() {
+    let args = vec![
+        "--url",
+        URL,
+        "--accounts-file",
+        "../accounts/accounts.json",
+        "--account",
+        "user1",
+        "declare",
+        "--contract-name",
+        "BuildFails",
+    ];
+
+    let snapbox = Command::new(cargo_bin!("sncast"))
+        .current_dir(CONTRACTS_DIR.to_string() + "/")
+        .args(args);
+
+    snapbox.assert().stderr_matches(indoc! {r"
+        Error: Path to Scarb.toml manifest does not exist =[..]
     "});
 }
 

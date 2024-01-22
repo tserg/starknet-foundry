@@ -3,12 +3,13 @@ use anyhow::{anyhow, bail, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use scarb_api::{get_contracts_map, ScarbCommand, StarknetContractArtifacts};
 use scarb_metadata;
+use scarb_metadata::{Metadata, PackageMetadata};
+use scarb_ui::args::PackagesFilter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::default::Default;
 use std::env;
-use std::fs::canonicalize;
 use std::str::FromStr;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -196,48 +197,63 @@ pub fn get_scarb_metadata_with_deps(
     execute_scarb_metadata_command(&command)
 }
 
-#[must_use]
-pub fn verify_or_determine_scarb_manifest_path(
-    path_to_scarb_toml: &Option<Utf8PathBuf>,
-) -> Option<Utf8PathBuf> {
+pub fn ensure_scarb_manifest_path(path_to_scarb_toml: &Option<Utf8PathBuf>) -> Result<Utf8PathBuf> {
     if let Some(path) = path_to_scarb_toml {
         assert!(path.exists(), "Failed to locate file at path = {path}");
     }
 
     let manifest_path = path_to_scarb_toml.clone().unwrap_or_else(|| {
-        get_scarb_manifest()
-            .context("Failed to obtain manifest path from scarb")
-            .unwrap()
+        get_scarb_manifest().expect("Failed to obtain manifest path from scarb")
     });
 
     if !manifest_path.exists() {
-        return None;
+        return Err(anyhow!(
+            "Path to Scarb.toml manifest does not exist = {manifest_path}"
+        ));
     }
 
-    Some(manifest_path)
+    Ok(manifest_path)
 }
 
-pub fn get_package_metadata<'a>(
-    metadata: &'a scarb_metadata::Metadata,
-    manifest_path: &'a Utf8PathBuf,
-) -> Result<&'a scarb_metadata::PackageMetadata> {
-    let manifest_path = canonicalize(manifest_path.clone())
-        .unwrap_or_else(|err| panic!("Failed to canonicalize {manifest_path}, error: {err:?}"));
-
-    let package = metadata
+fn get_package_metadata_by_name<'a>(
+    metadata: &'a Metadata,
+    package_name: &str,
+) -> Result<&'a PackageMetadata> {
+    metadata
         .packages
         .iter()
-        .find(|package| package.manifest_path == manifest_path)
+        .find(|package| package.name == package_name)
         .ok_or(anyhow!(
-            "Path = {} not found in scarb metadata",
-            manifest_path.display()
-        ))?;
-    Ok(package)
+            "Package {} not found in scarb metadata",
+            &package_name
+        ))
+}
+
+fn get_default_package_metadata(metadata: &Metadata) -> Result<&PackageMetadata> {
+    match metadata.packages.iter().collect::<Vec<_>>().as_slice() {
+        [package] => Ok(package),
+        [] => Err(anyhow!("No package found in metadata")),
+        _ => Err(anyhow!(
+            "More than one package found in metadata - specify package using --package flag"
+        )),
+    }
+}
+
+pub fn get_package_metadata(
+    manifest_path: &Utf8PathBuf,
+    package_name: &Option<String>,
+) -> Result<PackageMetadata> {
+    let metadata = get_scarb_metadata(manifest_path)?;
+    match &package_name {
+        Some(package_name) => Ok(get_package_metadata_by_name(&metadata, package_name)?.clone()),
+        None => Ok(get_default_package_metadata(&metadata)?.clone()),
+    }
 }
 
 pub fn parse_scarb_config(
     profile: &Option<String>,
     path: &Option<Utf8PathBuf>,
+    package_name: &Option<String>,
 ) -> Result<CastConfig> {
     let manifest_path = match path.clone() {
         Some(path) => {
@@ -253,7 +269,7 @@ pub fn parse_scarb_config(
         return Ok(CastConfig::default());
     }
 
-    let metadata = get_scarb_metadata(&manifest_path)?;
+    let metadata = get_package_metadata(&manifest_path, package_name)?;
 
     match get_package_tool_sncast(&metadata) {
         Ok(package_tool_sncast) => {
@@ -263,13 +279,8 @@ pub fn parse_scarb_config(
     }
 }
 
-pub fn get_package_tool_sncast(metadata: &scarb_metadata::Metadata) -> Result<&Value> {
-    let first_package = metadata
-        .packages
-        .first()
-        .ok_or_else(|| anyhow!("No package found in metadata"))?;
-
-    let tool = first_package
+pub fn get_package_tool_sncast(metadata: &PackageMetadata) -> Result<&Value> {
+    let tool = metadata
         .manifest_metadata
         .tool
         .as_ref()
@@ -282,28 +293,31 @@ pub fn get_package_tool_sncast(metadata: &scarb_metadata::Metadata) -> Result<&V
     Ok(tool_sncast)
 }
 
-pub fn build(config: &BuildConfig) -> Result<HashMap<String, StarknetContractArtifacts>> {
+pub fn build(
+    package: &PackageMetadata,
+    config: &BuildConfig,
+) -> Result<HashMap<String, StarknetContractArtifacts>> {
+    let filter = PackagesFilter::generate_for::<Metadata>([package].into_iter());
+
     let mut cmd = ScarbCommand::new_with_stdio();
-    cmd.arg("build").manifest_path(&config.scarb_toml_path);
+    cmd.arg("build")
+        .manifest_path(&config.scarb_toml_path)
+        .packages_filter(filter);
     if config.json {
         cmd.json();
     }
     cmd.run()
         .map_err(|e| anyhow!(format!("Failed to build using scarb; {e}")))?;
 
-    let metadata = get_scarb_metadata_command(&config.scarb_toml_path)?
-        .exec()
-        .expect("Failed to obtain metadata");
-    let package = get_package_metadata(&metadata, &config.scarb_toml_path)
-        .with_context(|| anyhow!("Failed to find package"))?;
+    let metadata = get_scarb_metadata_with_deps(&config.scarb_toml_path)?;
     get_contracts_map(&metadata, &package.id)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::helpers::scarb_utils::get_scarb_metadata;
     use crate::helpers::scarb_utils::parse_scarb_config;
     use crate::helpers::scarb_utils::CastConfig;
+    use crate::helpers::scarb_utils::{get_package_metadata, get_scarb_metadata};
     use crate::helpers::scarb_utils::{WAIT_RETRY_INTERVAL, WAIT_TIMEOUT};
     use camino::Utf8PathBuf;
     use sealed_test::prelude::rusty_fork_test;
@@ -316,6 +330,7 @@ mod tests {
             &Some(Utf8PathBuf::from(
                 "tests/data/contracts/constructor_with_params/Scarb.toml",
             )),
+            &None,
         )
         .unwrap();
 
@@ -328,6 +343,7 @@ mod tests {
         let config = parse_scarb_config(
             &None,
             &Some(Utf8PathBuf::from("tests/data/contracts/map/Scarb.toml")),
+            &Some("map".to_string()),
         )
         .unwrap();
         assert_eq!(config.account, String::from("user2"));
@@ -336,8 +352,12 @@ mod tests {
 
     #[test]
     fn test_parse_scarb_config_not_found() {
-        let config =
-            parse_scarb_config(&None, &Some(Utf8PathBuf::from("whatever/Scarb.toml"))).unwrap_err();
+        let config = parse_scarb_config(
+            &None,
+            &Some(Utf8PathBuf::from("whatever/Scarb.toml")),
+            &None,
+        )
+        .unwrap_err();
         assert!(config
             .to_string()
             .contains("Failed to locate file at path = whatever/Scarb.toml"));
@@ -345,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_parse_scarb_config_no_path_not_found() {
-        let config = parse_scarb_config(&None, &None).unwrap();
+        let config = parse_scarb_config(&None, &None, &None).unwrap();
 
         assert!(config.rpc_url.is_empty());
         assert!(config.account.is_empty());
@@ -356,6 +376,7 @@ mod tests {
         let config = parse_scarb_config(
             &None,
             &Some(Utf8PathBuf::from("tests/data/files/noconfig_Scarb.toml")),
+            &None,
         )
         .unwrap();
 
@@ -368,6 +389,7 @@ mod tests {
         let config = parse_scarb_config(
             &Some(String::from("mariusz")),
             &Some(Utf8PathBuf::from("tests/data/contracts/map/Scarb.toml")),
+            &None,
         )
         .unwrap_err();
         assert_eq!(
@@ -381,6 +403,7 @@ mod tests {
         let config = parse_scarb_config(
             &None,
             &Some(Utf8PathBuf::from("tests/data/files/somemissing_Scarb.toml")),
+            &None,
         )
         .unwrap();
 
@@ -389,7 +412,7 @@ mod tests {
 
     #[sealed_test(files = ["tests/data/contracts/no_sierra/Scarb.toml"])]
     fn test_parse_scarb_config_no_profile_no_path() {
-        let config = parse_scarb_config(&None, &None).unwrap();
+        let config = parse_scarb_config(&None, &None, &None).unwrap();
 
         assert!(config.rpc_url.is_empty());
         assert!(config.account.is_empty());
@@ -397,7 +420,7 @@ mod tests {
 
     #[sealed_test(files = ["tests/data/contracts/constructor_with_params/Scarb.toml"])]
     fn test_parse_scarb_config_no_path() {
-        let config = parse_scarb_config(&Some(String::from("myprofile")), &None).unwrap();
+        let config = parse_scarb_config(&Some(String::from("myprofile")), &None, &None).unwrap();
 
         assert_eq!(config.rpc_url, String::from("http://127.0.0.1:5055/rpc"));
         assert_eq!(config.account, String::from("user1"));
@@ -422,5 +445,45 @@ mod tests {
         let config = CastConfig::default();
         assert_eq!(config.wait_timeout, WAIT_TIMEOUT);
         assert_eq!(config.wait_retry_interval, WAIT_RETRY_INTERVAL);
+    }
+
+    #[test]
+    fn test_get_package_metadata_happy_default() {
+        let metadata =
+            get_package_metadata(&"tests/data/contracts/map/Scarb.toml".into(), &None).unwrap();
+        assert_eq!(metadata.name, "map");
+    }
+
+    #[test]
+    fn test_get_package_metadata_happy_by_name() {
+        let metadata = get_package_metadata(
+            &"tests/data/contracts/multiple_packages/Scarb.toml".into(),
+            &Some("package2".into()),
+        )
+        .unwrap();
+        assert_eq!(metadata.name, "package2");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "More than one package found in metadata - specify package using --package flag"
+    )]
+    fn test_get_package_metadata_more_than_one_default() {
+        get_package_metadata(
+            &"tests/data/contracts/multiple_packages/Scarb.toml".into(),
+            &None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Package whatever not found in scarb metadata")]
+    fn test_get_package_metadata_no_such_package() {
+        let metadata = get_package_metadata(
+            &"tests/data/contracts/multiple_packages/Scarb.toml".into(),
+            &Some("whatever".into()),
+        )
+        .unwrap();
+        assert_eq!(metadata.name, "package2");
     }
 }

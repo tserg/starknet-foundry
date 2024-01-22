@@ -11,7 +11,7 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use sncast::helpers::constants::{DEFAULT_ACCOUNTS_FILE, DEFAULT_MULTICALL_CONTENTS};
 use sncast::helpers::scarb_utils::{
-    build, get_package_metadata, get_scarb_manifest, get_scarb_metadata_with_deps,
+    build, ensure_scarb_manifest_path, get_package_metadata, get_scarb_metadata_with_deps,
     parse_scarb_config, BuildConfig, CastConfig,
 };
 use sncast::{
@@ -80,6 +80,10 @@ struct Cli {
     #[clap(long)]
     wait_retry_interval: Option<u8>,
 
+    /// Scarb package that should be used for artifacts compilation
+    #[clap(long)]
+    package: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -117,28 +121,28 @@ fn main() -> Result<()> {
     let numbers_format = NumbersFormat::from_flags(cli.hex_format, cli.int_format);
     let output_format = OutputFormat::from_flag(cli.json);
 
-    let mut config = parse_scarb_config(&cli.profile, &cli.path_to_scarb_toml)?;
+    let mut config = parse_scarb_config(&cli.profile, &cli.path_to_scarb_toml, &cli.package)?;
     update_cast_config(&mut config, &cli);
 
     let provider = get_provider(&config.rpc_url)?;
     let runtime = Runtime::new().expect("Failed to instantiate Runtime");
 
     if let Commands::Script(script) = cli.command {
-        let manifest_path = match cli.path_to_scarb_toml {
-            Some(path) => path,
-            None => get_scarb_manifest().context("Failed to obtain manifest path from Scarb")?,
-        };
-        let metadata = get_scarb_metadata_with_deps(&manifest_path)?;
-        let package_metadata = get_package_metadata(&metadata, &manifest_path)?;
-        let mut artifacts = build(&BuildConfig {
-            scarb_toml_path: manifest_path.clone(),
-            json: cli.json,
-        })
+        let manifest_path = ensure_scarb_manifest_path(&cli.path_to_scarb_toml)?;
+        let package_metadata = get_package_metadata(&manifest_path, &cli.package)?;
+        let mut artifacts = build(
+            &package_metadata,
+            &BuildConfig {
+                scarb_toml_path: manifest_path.clone(),
+                json: cli.json,
+            },
+        )
         .expect("Failed to build script");
+        let metadata_with_deps = get_scarb_metadata_with_deps(&manifest_path)?;
         let mut result = starknet_commands::script::run(
             &script.script_module_name,
-            &metadata,
-            package_metadata,
+            &metadata_with_deps,
+            &package_metadata,
             &mut artifacts,
             &provider,
             runtime,
@@ -180,16 +184,15 @@ async fn run_async_command(
                 config.keystore,
             )
             .await?;
-            let manifest_path = match cli.path_to_scarb_toml.clone() {
-                Some(path) => path,
-                None => {
-                    get_scarb_manifest().context("Failed to obtain manifest path from Scarb")?
-                }
-            };
-            let artifacts = build(&BuildConfig {
-                scarb_toml_path: manifest_path,
-                json: cli.json,
-            })?;
+            let manifest_path = ensure_scarb_manifest_path(&cli.path_to_scarb_toml)?;
+            let package_metadata = get_package_metadata(&manifest_path, &cli.package)?;
+            let artifacts = build(
+                &package_metadata,
+                &BuildConfig {
+                    scarb_toml_path: manifest_path,
+                    json: cli.json,
+                },
+            )?;
             let mut result = starknet_commands::declare::declare(
                 &declare.contract,
                 declare.max_fee,
@@ -312,6 +315,7 @@ async fn run_async_command(
                     &add.name.clone(),
                     &config.accounts_file,
                     &cli.path_to_scarb_toml,
+                    &cli.package,
                     &provider,
                     &add,
                 )
@@ -335,7 +339,8 @@ async fn run_async_command(
                     &config.accounts_file,
                     config.keystore,
                     &provider,
-                    cli.path_to_scarb_toml,
+                    &cli.path_to_scarb_toml,
+                    &cli.package,
                     chain_id,
                     create.salt,
                     create.add_profile,

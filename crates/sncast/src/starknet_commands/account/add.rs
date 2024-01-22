@@ -4,7 +4,7 @@ use crate::starknet_commands::account::{
 use anyhow::{ensure, Context, Result};
 use camino::Utf8PathBuf;
 use clap::Args;
-use sncast::helpers::scarb_utils::CastConfig;
+use sncast::helpers::scarb_utils::{ensure_scarb_manifest_path, get_package_metadata, CastConfig};
 use sncast::response::structs::AccountAddResponse;
 use sncast::{get_chain_id, parse_number};
 use starknet::core::types::BlockTag::Pending;
@@ -62,6 +62,7 @@ pub async fn add(
     account: &str,
     accounts_file: &Utf8PathBuf,
     path_to_scarb_toml: &Option<Utf8PathBuf>,
+    package_name: &Option<String>,
     provider: &JsonRpcClient<HttpTransport>,
     add: &Add,
 ) -> Result<AccountAddResponse> {
@@ -93,13 +94,15 @@ pub async fn add(
     write_account_to_accounts_file(account, accounts_file, chain_id, account_json.clone())?;
 
     if add.add_profile {
+        let manifest_path = ensure_scarb_manifest_path(path_to_scarb_toml)?;
         let config = CastConfig {
             rpc_url: rpc_url.into(),
             account: account.into(),
             accounts_file: accounts_file.into(),
             ..Default::default()
         };
-        add_created_profile_to_configuration(path_to_scarb_toml, &config)?;
+        let package = get_package_metadata(&manifest_path, package_name)?;
+        add_created_profile_to_configuration(&package, &config)?;
     }
 
     Ok(AccountAddResponse {
