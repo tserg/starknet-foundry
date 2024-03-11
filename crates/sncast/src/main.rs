@@ -5,12 +5,13 @@ use crate::starknet_commands::{
     script::Script,
 };
 use anyhow::{Context, Result};
+use configuration::load_global_config;
 use sncast::response::print::{print_command_result, OutputFormat};
 
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use shared::verify_and_warn_if_incompatible_rpc_version;
-use sncast::helpers::configuration::{load_config, CastConfig};
+use sncast::helpers::configuration::CastConfig;
 use sncast::helpers::constants::{DEFAULT_ACCOUNTS_FILE, DEFAULT_MULTICALL_CONTENTS};
 use sncast::helpers::scarb_utils::{
     assert_manifest_path_exists, build_and_load_artifacts, get_package_metadata,
@@ -122,7 +123,7 @@ fn main() -> Result<()> {
     if let Commands::Script(script) = &cli.command {
         run_script_command(&cli, runtime, script, numbers_format, &output_format)
     } else {
-        let mut config = load_config(&cli.profile, &None)?;
+        let mut config = load_global_config::<CastConfig>(&None, &cli.profile)?;
         update_cast_config(&mut config, &cli);
         let provider = get_provider(&config.rpc_url)?;
         runtime.block_on(run_async_command(
@@ -416,7 +417,10 @@ fn run_script_command(
             let manifest_path = assert_manifest_path_exists()?;
             let package_metadata = get_package_metadata(&manifest_path, &run.package)?;
 
-            let mut config = load_config(&cli.profile, &Some(package_metadata.root.clone()))?;
+            let mut config = load_global_config::<CastConfig>(
+                &Some(package_metadata.root.clone()),
+                &cli.profile,
+            )?;
             update_cast_config(&mut config, cli);
             let provider = get_provider(&config.rpc_url)?;
             runtime.block_on(verify_and_warn_if_incompatible_rpc_version(

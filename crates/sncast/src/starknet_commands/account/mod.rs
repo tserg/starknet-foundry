@@ -5,11 +5,10 @@ use crate::starknet_commands::account::deploy::Deploy;
 use anyhow::{anyhow, bail, Context, Result};
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
-use serde_json::json;
-use sncast::helpers::configuration::{
-    find_config_file, load_config, search_config_upwards_relative_to,
+use configuration::{
+    find_config_file, load_global_config, search_config_upwards_relative_to, CONFIG_FILENAME,
 };
-use sncast::helpers::constants::CONFIG_FILENAME;
+use serde_json::json;
 use sncast::{chain_id_to_network_name, decode_chain_id, helpers::configuration::CastConfig};
 use starknet::{core::types::FieldElement, signers::SigningKey};
 use std::{fs::OpenOptions, io::Write};
@@ -98,7 +97,7 @@ pub fn add_created_profile_to_configuration(
     cast_config: &CastConfig,
     path: &Option<Utf8PathBuf>,
 ) -> Result<()> {
-    if !load_config(profile, path)
+    if !load_global_config::<CastConfig>(path, profile)
         .unwrap_or_default()
         .account
         .is_empty()
@@ -162,11 +161,24 @@ pub fn add_created_profile_to_configuration(
 #[cfg(test)]
 mod tests {
     use camino::Utf8PathBuf;
-    use sncast::helpers::configuration::{copy_config_to_tempdir, CastConfig};
+    use configuration::CONFIG_FILENAME;
+    use sncast::helpers::configuration::CastConfig;
     use sncast::helpers::constants::DEFAULT_ACCOUNTS_FILE;
     use std::fs;
+    use tempfile::{tempdir, TempDir};
 
     use crate::starknet_commands::account::add_created_profile_to_configuration;
+    #[must_use]
+    pub fn copy_config_to_tempdir(src_path: &str, additional_path: Option<&str>) -> TempDir {
+        let temp_dir = tempdir().expect("Failed to create a temporary directory");
+        if let Some(dir) = additional_path {
+            let path = temp_dir.path().join(dir);
+            fs::create_dir_all(path).expect("Failed to create directories in temp dir");
+        };
+        let temp_dir_file_path = temp_dir.path().join(CONFIG_FILENAME);
+        fs::copy(src_path, temp_dir_file_path).expect("Failed to copy config file to temp dir");
+        temp_dir
+    }
 
     #[test]
     fn test_add_created_profile_to_configuration_happy_case() {
