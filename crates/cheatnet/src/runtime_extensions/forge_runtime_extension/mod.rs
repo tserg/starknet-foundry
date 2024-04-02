@@ -668,12 +668,15 @@ impl<'a> ExtensionLogic for ForgeExtension<'a> {
 }
 
 fn handle_deploy_result(
-    deploy_result: Result<ContractAddress, CheatcodeError>,
+    deploy_result: Result<(ContractAddress, Vec<Felt252>), CheatcodeError>,
 ) -> Result<CheatcodeHandlingResult, EnhancedHintError> {
     match deploy_result {
-        Ok(contract_address) => {
-            let felt_contract_address = contract_address.into_();
-            let result = vec![Felt252::from(0), felt_contract_address];
+        Ok((contract_address, retdata)) => {
+            let mut result = Vec::new();
+            result.push(Felt252::from(0));
+            result.push(contract_address.into_());
+            result.push(retdata.len().into());
+            result.extend(retdata);
             Ok(CheatcodeHandlingResult::Handled(result))
         }
         Err(CheatcodeError::Recoverable(panic_data)) => Ok(CheatcodeHandlingResult::Handled(
